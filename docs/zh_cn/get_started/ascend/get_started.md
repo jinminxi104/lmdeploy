@@ -37,7 +37,8 @@ DOCKER_BUILDKIT=1 docker build -t lmdeploy-aarch64-ascend:v0.1 \
 #### 镜像的使用
 
 关于镜像的使用方式，请参考这篇[文档](https://www.hiascend.com/document/detail/zh/mindx-dl/60rc1/clusterscheduling/dockerruntimeug/dlruntime_ug_013.html)。
-并且在使用镜像前安装Ascend Docker Runtime。
+并且在使用镜像前安装[Ascend Docker Runtime](https://www.hiascend.com/document/detail/zh/mindx-dl/60rc2/clusterscheduling/clusterschedulingig/clusterschedulingig/dlug_installation_012.html)。
+***如果在后续容器内出现`libascend_hal.so: cannot open shared object file`错误，说明Ascend Docker Runtime没有被正确安装***
 以下是在安装了 Ascend Docker Runtime 的情况下，启动用于华为昇腾设备的容器的示例：
 
 ```bash
@@ -55,6 +56,8 @@ pip install dlinfer-ascend
 
 ## 离线批处理
 
+***图模式已经支持了Atlas 800T A2。目前，单卡下的InternLM2-7B/LLaMa2-7B/Qwen2-7B已经通过测试。用户可以设定`eager_mode = False`来开启图模式，或者设定`eager_mode = True`来关闭图模式。***
+
 ### LLM 推理
 
 将`device_type="ascend"`加入`PytorchEngineConfig`的参数中。
@@ -64,7 +67,7 @@ from lmdeploy import pipeline
 from lmdeploy import PytorchEngineConfig
 if __name__ == "__main__":
     pipe = pipeline("internlm/internlm2_5-7b-chat",
-                    backend_config = PytorchEngineConfig(tp=1, device_type="ascend"))
+                    backend_config = PytorchEngineConfig(tp=1, device_type="ascend", eager_mode = True))
     question = ["Shanghai is", "Please introduce China", "How are you?"]
     response = pipe(question)
     print(response)
@@ -79,7 +82,7 @@ from lmdeploy import pipeline, PytorchEngineConfig
 from lmdeploy.vl import load_image
 if __name__ == "__main__":
     pipe = pipeline('OpenGVLab/InternVL2-2B',
-                    backend_config=PytorchEngineConfig(tp=1, device_type='ascend'))
+                    backend_config=PytorchEngineConfig(tp=1, device_type='ascend', eager_mode = True))
     image = load_image('https://raw.githubusercontent.com/open-mmlab/mmdeploy/main/tests/data/tiger.jpeg')
     response = pipe(('describe this image', image))
     print(response)
@@ -87,12 +90,15 @@ if __name__ == "__main__":
 
 ## 在线服务
 
+***图模式已经支持Atlas 800T A2。目前，单卡下的InternLM2-7B/LLaMa2-7B/Qwen2-7B已经通过测试。
+在线服务时，图模式默认开启，用户可以添加`--eager-mode`来关闭图模式***
+
 ### LLM 模型服务
 
 将`--device ascend`加入到服务启动命令中。
 
 ```bash
-lmdeploy serve api_server --backend pytorch --device ascend internlm/internlm2_5-7b-chat
+lmdeploy serve api_server --backend pytorch --device ascend --eager-mode internlm/internlm2_5-7b-chat
 ```
 
 ### VLM 模型服务
@@ -100,7 +106,7 @@ lmdeploy serve api_server --backend pytorch --device ascend internlm/internlm2_5
 将`--device ascend`加入到服务启动命令中。
 
 ```bash
-lmdeploy serve api_server --backend pytorch --device ascend OpenGVLab/InternVL2-2B
+lmdeploy serve api_server --backend pytorch --device ascend --eager-mode OpenGVLab/InternVL2-2B
 ```
 
 ## 使用命令行与LLM模型对话
@@ -108,12 +114,12 @@ lmdeploy serve api_server --backend pytorch --device ascend OpenGVLab/InternVL2
 将`--device ascend`加入到服务启动命令中。
 
 ```bash
-lmdeploy chat internlm/internlm2_5-7b-chat --backend pytorch --device ascend
+lmdeploy chat internlm/internlm2_5-7b-chat --backend pytorch --eager-mode --device ascend
 ```
 
 也可以运行以下命令使启动容器后开启lmdeploy聊天
 
 ```bash
 docker exec -it lmdeploy_ascend_demo \
-    bash -i -c "lmdeploy chat --backend pytorch --device ascend internlm/internlm2_5-7b-chat"
+    bash -i -c "lmdeploy chat --backend pytorch --device ascend --eager-mode internlm/internlm2_5-7b-chat"
 ```
