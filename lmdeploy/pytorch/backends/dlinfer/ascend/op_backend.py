@@ -47,6 +47,7 @@ class AscendOpsBackend(DlinferOpsBackend):
         )
 
     @classmethod
+    #@torch.profiler.record_function("update_ctx")
     def update_step_context(cls, step_context):
         """update step context."""
 
@@ -54,12 +55,13 @@ class AscendOpsBackend(DlinferOpsBackend):
             if cls.total_slots is None:
                 cls.total_slots = torch.arange(
                     block_num * block_size,
-                    dtype=torch.long,
-                    device=step_context.block_offsets.device)
+                    dtype=torch.long)#,
+                    #device=step_context.block_offsets.device)
                 cls.total_slots = cls.total_slots.view(block_num, block_size)
             return cls.total_slots
 
         kv_start_indices, attention_mask = [], []
+        kv_start_indices = torch.empty([])
         block_num, block_size, _ = step_context.kv_caches[0][0].shape
         is_unpaged_prefill = False
         if not step_context.is_decoding:
@@ -70,6 +72,7 @@ class AscendOpsBackend(DlinferOpsBackend):
         kv_seqlens_list = step_context.kv_seqlens.tolist()
         max_q_seq_len = max(q_seqlens_list)
         max_kv_seq_len = max(kv_seqlens_list)
+        block_offsets = step_context.block_offsets.cpu()
 
         for i in range(step_context.q_start_loc.size(0)):
             q_seq_len = q_seqlens_list[i]
@@ -78,9 +81,12 @@ class AscendOpsBackend(DlinferOpsBackend):
             # collect kv start indices.
             history_length = kv_seq_len - q_seq_len
             total_slots = get_total_slots()
-            slot_tables = total_slots[step_context.block_offsets[i]].view(-1)
+            slot_tables = total_slots[block_offsets[i]].view(-1)
             slots = slot_tables[history_length:kv_seq_len]
-            kv_start_indices.append(slots)
+            if i == 0:
+                kv_start_indices = slots
+            else:
+                kv_start_indices = torch.cat((kv_start_indices, slots))
 
             # collect attention mask of paged_prefill attention stage.
             if not (step_context.is_decoding or is_unpaged_prefill):
@@ -95,7 +101,7 @@ class AscendOpsBackend(DlinferOpsBackend):
                     ))
                 attention_mask.append(single_attention_mask)
 
-        kv_start_indices = torch.cat(kv_start_indices)
+        #kv_start_indices = torch.cat(kv_start_indices)
 
         if step_context.is_decoding:
             # prepare some params of paged_decode attention stage.
@@ -160,7 +166,7 @@ class AscendOpsBackend(DlinferOpsBackend):
             q_start_loc=q_start_loc_cpu,
             q_seqlens=q_seqlens_cpu,
             kv_seqlens=kv_seqlens,
-            kv_start_indices=kv_start_indices,
+            kv_start_indices=kv_start_indices.npu(),
             block_size=block_size,
             attention_mask=attention_mask,
             is_unpaged_prefill=is_unpaged_prefill,

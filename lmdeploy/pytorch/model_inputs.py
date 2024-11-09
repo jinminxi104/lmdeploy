@@ -64,7 +64,8 @@ class VisionModelInputs:
             k = f.name
             v = getattr(self, k)
             if isinstance(v, torch.Tensor):
-                v = v.to(device)
+                v = v
+                #v = v.to(device)
             elif k == 'input_embedding_ranges' and v is not None:
                 v = [e.to(device) for e in v]
             elif k == 'input_embeddings' and v is not None:
@@ -221,6 +222,7 @@ class StepContext:
     _outputs: Dict = field(default_factory=dict)
 
     @classmethod
+    #@torch.profiler.record_function("ctx_new")
     def new(
         cls,
         inputs: ModelInputs,
@@ -272,15 +274,15 @@ class StepContext:
         kv_seqlens -= inputs.num_ignored_history
 
         ret = StepContext(
-            input_ids=inputs.input_ids,
+            input_ids=inputs.input_ids.npu(),
             block_offsets=inputs.block_offsets,
-            position_ids=position_ids,
+            position_ids=position_ids.npu(),
             input_embeddings=input_embeddings,
             input_embedding_indexing=input_embedding_indexing,
-            attention_mask=attention_mask,
+            attention_mask=attention_mask.npu(),
             q_seqlens=q_seqlens,
             kv_seqlens=kv_seqlens,
-            q_start_loc=q_start_loc,
+            q_start_loc=q_start_loc.npu(),
             kv_caches=kv_caches,
             is_decoding=inputs.is_decoding,
             world_size=world_size,

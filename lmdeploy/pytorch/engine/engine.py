@@ -511,6 +511,7 @@ class Engine:
             history_cross_kv_seqlens=history_cross_kv_seqlens,
         )
 
+    #@torch.profiler.record_function("_batch_stopping_criteria")
     def _batch_stopping_criteria(self, token_ids: torch.Tensor,
                                  stop_words: torch.Tensor,
                                  num_appendable_ids: torch.Tensor):
@@ -526,6 +527,7 @@ class Engine:
         return stopped, num_appendable_ids
 
     @logging_timer('SamplingLogits', logger)
+    #@torch.profiler.record_function("async_sampling_logits")
     def async_sampling_logits(self, logits: torch.Tensor,
                               all_ids: torch.Tensor,
                               guided_input_ids: torch.Tensor,
@@ -658,6 +660,7 @@ class Engine:
         ret['logits'] = logits
         return ret
 
+    #@torch.profiler.record_function("_make_infer_outputs")
     def _make_infer_outputs(self, next_token_ids: torch.LongTensor,
                             logits: torch.Tensor, stopped: torch.Tensor):
         """make infer output."""
@@ -723,6 +726,7 @@ class Engine:
             return_logits: bool, output_que: asyncio.Queue):
         """asyc forward task."""
 
+        #@torch.profiler.record_function("update_inputs")
         def __update_inputs(next_token_ids):
             """update inputs."""
             nonlocal all_ids, guided_input_ids
@@ -766,12 +770,17 @@ class Engine:
                 num_ignore_eos > 0)
             num_ignore_eos = num_ignore_eos - 1
 
+            #next_token_ids = next_token_ids.cpu()
+
             # stopping criteria
             stopped, num_appendable_ids = self._batch_stopping_criteria(
                 next_token_ids, sampling_inputs.stop_words, num_appendable_ids)
 
             # send output
             stopped = stopped.cpu()
+            await asyncio.get_event_loop().run_in_executor(None,
+                                                           self.stream.synchronize)
+
             finish = stopped.all().item() or (idx == loop_count - 1)
             finish = finish or _check_finish(self.scheduler, idx)
             output = (next_token_ids.cpu(), logits, stopped)

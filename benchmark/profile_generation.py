@@ -429,7 +429,9 @@ def main():
                     thread_safe=True,
                     eager_mode=args.eager_mode,
                     enable_prefix_caching=args.enable_prefix_caching,
+                    device_type='ascend',
                     dtype=args.dtype,
+                    max_batch_size=256,
                 )
             gen_config = GenerationConfig(top_k=args.top_k,
                                           top_p=args.top_p,

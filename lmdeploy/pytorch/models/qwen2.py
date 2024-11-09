@@ -272,6 +272,7 @@ class Qwen2Model(nn.Module):
 
         hidden_states = inputs_embeds
 
+        print(position_ids)
         # rotary embedding
         cos, sin = self.rotary_emb(hidden_states, position_ids)
         cos, sin = cos[0], sin[0]

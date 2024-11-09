@@ -303,8 +303,8 @@ class BaseModelAgent(AutoModelAgent):
         output = self._forward_impl(inputs,
                                     swap_in_map=swap_in_map,
                                     swap_out_map=swap_out_map)
-        await asyncio.get_event_loop().run_in_executor(None,
-                                                       self.stream.synchronize)
+        #await asyncio.get_event_loop().run_in_executor(None,
+        #                                               self.stream.synchronize)
         return output
 
     def get_logits(self, hidden_states: torch.Tensor):
