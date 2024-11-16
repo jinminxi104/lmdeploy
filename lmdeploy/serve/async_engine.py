@@ -359,6 +359,7 @@ class AsyncEngine(LogitsMixin):
                 *[_inner_call(i, generators[i]) for i in range(len(prompts))])
 
         _get_event_loop().run_until_complete(gather())
+        import pdb; pdb.set_trace()
         outputs = outputs[0] if need_list_wrap else outputs
         return outputs
 

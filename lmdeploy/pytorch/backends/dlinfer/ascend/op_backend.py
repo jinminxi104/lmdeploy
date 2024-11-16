@@ -47,7 +47,7 @@ class AscendOpsBackend(DlinferOpsBackend):
         )
 
     @classmethod
-    #@torch.profiler.record_function("update_ctx")
+    @torch.profiler.record_function("update_ctx")
     def update_step_context(cls, step_context):
         """update step context."""
 

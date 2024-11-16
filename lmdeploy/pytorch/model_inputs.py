@@ -222,7 +222,7 @@ class StepContext:
     _outputs: Dict = field(default_factory=dict)
 
     @classmethod
-    #@torch.profiler.record_function("ctx_new")
+    @torch.profiler.record_function("ctx_new")
     def new(
         cls,
         inputs: ModelInputs,
