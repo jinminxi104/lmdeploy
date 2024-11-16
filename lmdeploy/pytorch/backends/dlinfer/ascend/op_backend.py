@@ -59,6 +59,7 @@ class AscendOpsBackend(DlinferOpsBackend):
                 cls.total_slots = cls.total_slots.view(block_num, block_size)
             return cls.total_slots
 
+        import pdb; pdb.set_trace()
         kv_start_indices, attention_mask = [], []
         block_num, block_size, _ = step_context.kv_caches[0][0].shape
         is_unpaged_prefill = False
@@ -71,31 +72,45 @@ class AscendOpsBackend(DlinferOpsBackend):
         max_q_seq_len = max(q_seqlens_list)
         max_kv_seq_len = max(kv_seqlens_list)
 
-        for i in range(step_context.q_start_loc.size(0)):
-            q_seq_len = q_seqlens_list[i]
-            kv_seq_len = kv_seqlens_list[i]
+        if step_context.is_decoding:
+            idx = (step_context.kv_seqlens - 1) % 64
+            last_block = step_context.block_offsets[:,-1].view(-1)
+            kv_start_indices = last_block * 64 + idx
 
-            # collect kv start indices.
-            history_length = kv_seq_len - q_seq_len
-            total_slots = get_total_slots()
-            slot_tables = total_slots[step_context.block_offsets[i]].view(-1)
-            slots = slot_tables[history_length:kv_seq_len]
-            kv_start_indices.append(slots)
 
-            # collect attention mask of paged_prefill attention stage.
-            if not (step_context.is_decoding or is_unpaged_prefill):
-                single_attention_mask = torch.logical_not(
-                    torch.tril(
-                        torch.ones(q_seq_len,
-                                   step_context.block_offsets.shape[1] *
-                                   block_size,
-                                   dtype=torch.bool,
-                                   device=step_context.block_offsets.device),
-                        diagonal=kv_seq_len - q_seq_len,
-                    ))
-                attention_mask.append(single_attention_mask)
+        else:
+        #if True:
+            for i in range(step_context.q_start_loc.size(0)):
+                q_seq_len = q_seqlens_list[i]
+                kv_seq_len = kv_seqlens_list[i]
 
-        kv_start_indices = torch.cat(kv_start_indices)
+                # collect kv start indices.
+                history_length = kv_seq_len - q_seq_len
+                total_slots = get_total_slots()
+                slot_tables = total_slots[step_context.block_offsets[i]].view(-1)
+                slots = slot_tables[history_length:kv_seq_len]
+                kv_start_indices.append(slots)
+
+                # collect attention mask of paged_prefill attention stage.
+                if not (step_context.is_decoding or is_unpaged_prefill):
+                    single_attention_mask = torch.logical_not(
+                        torch.tril(
+                            torch.ones(q_seq_len,
+                                       step_context.block_offsets.shape[1] *
+                                       block_size,
+                                       dtype=torch.bool,
+                                       device=step_context.block_offsets.device),
+                            diagonal=kv_seq_len - q_seq_len,
+                        ))
+                    attention_mask.append(single_attention_mask)
+
+            kv_start_indices = torch.cat(kv_start_indices)
+        '''
+        total_slots[step_context.block_offsets].view(3,-1) to get slots
+        then for slots[hist:q]
+        for masks, same as slots, use cat[tril() for i]
+        see timeline and its for performance
+        '''
 
         if step_context.is_decoding:
             # prepare some params of paged_decode attention stage.
