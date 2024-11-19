@@ -307,6 +307,7 @@ class BaseModelAgent(AutoModelAgent):
                                                        self.stream.synchronize)
         return output
 
+    @torch.profiler.record_function("get_logits") 
     def get_logits(self, hidden_states: torch.Tensor):
         """get logits of model output."""
         return self.patched_model.get_logits(hidden_states)

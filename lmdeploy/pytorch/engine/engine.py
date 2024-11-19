@@ -526,6 +526,7 @@ class Engine:
         return stopped, num_appendable_ids
 
     @logging_timer('SamplingLogits', logger)
+    @torch.profiler.record_function("async_sampling") 
     def async_sampling_logits(self, logits: torch.Tensor,
                               all_ids: torch.Tensor,
                               guided_input_ids: torch.Tensor,

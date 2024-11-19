@@ -47,6 +47,7 @@ class AscendOpsBackend(DlinferOpsBackend):
         )
 
     @classmethod
+    @torch.profiler.record_function("update_ctx") 
     def update_step_context(cls, step_context):
         """update step context."""
 
@@ -59,6 +60,7 @@ class AscendOpsBackend(DlinferOpsBackend):
                 cls.total_slots = cls.total_slots.view(block_num, block_size)
             return cls.total_slots
 
+        #import pdb; pdb.set_trace()
         kv_start_indices, attention_mask = [], []
         block_num, block_size, _ = step_context.kv_caches[0][0].shape
         is_unpaged_prefill = False
@@ -73,11 +75,9 @@ class AscendOpsBackend(DlinferOpsBackend):
 
         if step_context.is_decoding:
             idx = (step_context.kv_seqlens - 1) % block_size
-            block_num = step_context.kv_seqlens // block_size
+            block_num = (step_context.kv_seqlens - 1)// block_size
             last_block = step_context.block_offsets.gather(1, block_num.view(-1,1)).view(-1)
             kv_start_indices = last_block * block_size + idx
-
-
         else:
         #if True:
             for i in range(step_context.q_start_loc.size(0)):
