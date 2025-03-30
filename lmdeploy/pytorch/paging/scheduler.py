@@ -194,10 +194,12 @@ class Scheduler:
                 self._set_message_status(seq, MessageStatus.ABORTED)
                 self.block_manager.free(seq)
                 seq.set_step(0)
+                print('aborted', flush=True)
                 continue
 
             if not __evict_for_seq(seq):
                 self._set_message_status(seq, MessageStatus.WAITING)
+                print('waiting', flush=True)
                 continue
 
             self.block_manager.allocate(seq, prealloc_size)

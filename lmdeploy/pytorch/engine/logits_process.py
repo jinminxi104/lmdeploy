@@ -15,17 +15,20 @@ from ..messages import SchedulerSequence
 def _process_temperature_(scores: torch.Tensor, temperature: torch.Tensor):
     """process temperature."""
     temperature = temperature.to(scores.dtype)
-    scores.div_(temperature[:, None])
+    # scores.div_(temperature[:, None])
     return scores
 
 
 def _process_bad_words_(scores: torch.Tensor,
                         bad_words: torch.LongTensor,
                         mask: torch.BoolTensor,
-                        filter_value: float = -float('inf')):
+                        filter_value: float = -999999.999999):
     """process bad words."""
+    # import pdb; pdb.set_trace()
     filtered_scores = scores.gather(1, bad_words)
-    filtered_scores[mask] = filter_value
+    # torch.ops.npu.npu_scatter_nd_update_(filtered_scores, mask, filter_value)
+    # filtered_scores[mask] = filter_value
+    filtered_scores = mask * filter_value + filtered_scores * (~mask)
     scores.scatter_(1, bad_words, filtered_scores)
     return scores
 
@@ -322,6 +325,7 @@ class FusedLogitsProcessor:
             scores = _process_temperature_(scores, temperature)
 
         bad_words = sampling_inputs.bad_words
+        # import pdb; pdb.set_trace()
         if bad_words is not None:
             bad_mask = sampling_inputs.bad_mask
             scores = _process_bad_words_(scores, bad_words, bad_mask)
@@ -329,6 +333,7 @@ class FusedLogitsProcessor:
         stop_words = sampling_inputs.stop_words
         if stop_words is not None:
             stop_mask = sampling_inputs.stop_mask
+            # stop_mask = stop_mask & self.ignore_eos[:, None]
             stop_mask = torch.where(self.ignore_eos[:, None], stop_mask, False)
             scores = _process_bad_words_(scores, stop_words, stop_mask)
 

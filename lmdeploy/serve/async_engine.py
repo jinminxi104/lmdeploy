@@ -5,20 +5,26 @@ import atexit
 import concurrent.futures
 import dataclasses
 import json
+# import multiprocessing
 import os
 import random
 import re
+import threading
+import time
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager, closing
 from copy import deepcopy
+from dataclasses import dataclass
 from functools import partial
 from itertools import count
 from queue import Queue
 from threading import Thread
 from typing import Any, AsyncIterator, Dict, Iterator, List, Literal, Optional, Tuple, Union
 
+import torch
 import tqdm
 
-from lmdeploy import Tokenizer
+from lmdeploy import Tokenizer, detoken
 from lmdeploy.logger import RequestLogger
 from lmdeploy.messages import GenerationConfig, PytorchEngineConfig, Response, ResponseType, TurbomindEngineConfig
 from lmdeploy.model import MODELS, ChatTemplateConfig, best_match_model
@@ -27,6 +33,9 @@ from lmdeploy.tokenizer import DetokenizeState
 from lmdeploy.utils import _get_and_verify_max_len, _stop_words, get_logger
 
 logger = get_logger('lmdeploy')
+
+# new_executor = ProcessPoolExecutor(max_workers=4)
+# print(f'initing..... NEW pool...... {new_executor}')
 
 
 def get_names_from_model(model_path: str, model_name: str = None):
@@ -294,6 +303,9 @@ class AsyncEngine(LogitsMixin):
         self.request_logger = RequestLogger(max_log_len)
         self.internal_thread = _EventLoopThread(daemon=True)
         self.limiter: asyncio.Semaphore = None
+        self.executor = ProcessPoolExecutor(max_workers=8,
+                                            initializer=detoken.init_tokenizer,
+                                            initargs=(self.tokenizer, ))
 
     def close(self):
         self.internal_thread.close()
@@ -736,13 +748,70 @@ class AsyncEngine(LogitsMixin):
                     prev_len = output_len
 
                     ids_offset = state.ids_offset
-                    response, state = self.tokenizer.detokenize_incrementally(
-                        token_ids,
-                        state,
-                        skip_special_tokens=gen_config.skip_special_tokens,
-                        spaces_between_special_tokens=gen_config.spaces_between_special_tokens)
-                    res = token_ids[ids_offset:]
 
+                    #profiler = cProfile.Profile()
+                    #profiler.enable()
+
+                    #print("do detokenize")
+                    if False:
+                        # 创建detokenize请求
+                        #result = await self._detokenize_in_process(
+                        #print("into detokenize")
+                        '''
+                        #task = loop.run_in_executor(
+                        process = multiprocessing.Process(target=self._detokenize_func, args= (res, state,
+                            gen_config,
+                            self.tokenizer))
+                        process.start()
+                        process.join()
+                        loop = asyncio.get_running_loop()
+                        fut = loop.run_in_executor(
+                            self.executor, self._detokenize_func, res, state, gen_config,
+                            self.tokenizer)
+                        response, state = await asyncio.wrap_future(fut)
+                        '''
+
+                        # blocking
+                        loop = asyncio.get_running_loop()
+                        response, state = await loop.run_in_executor(
+                            self.executor,
+                            detoken.out_detokenize_func,
+                            token_ids,
+                            state,
+                            gen_config,
+                        )
+                        '''
+                        #self.st = time.time()
+                        #cnt = 0
+                        #ress = new_executor.submit(detoken.out_detokenize_func, res, state, gen_config,
+                        #    self.tokenizer)
+                        #print("submit.....")
+                        ress = self.executor.submit(detoken.out_detokenize_func, token_ids, state, gen_config,
+                            )
+                        while not ress.done():
+                            #print(f"not finished id {cnt}", flush=True)
+                            #cnt += 1
+                            await asyncio.sleep(0.01)
+                        response, state = ress.result()
+                        '''
+                        #print(f"after submit {time.time() - self.st}")
+                        #print(f"origin time {self.st}", flush=True)
+                        #print(f"after .result {time.time() - self.st}")
+
+                        #ret = await asyncio.gather(task)
+                        #response, state = ret[0]
+                        #response = result.response
+                        #state = result.state
+                    else:
+                        response, state = self.tokenizer.detokenize_incrementally(
+                            token_ids,
+                            state,
+                            skip_special_tokens=gen_config.skip_special_tokens,
+                            spaces_between_special_tokens=gen_config.spaces_between_special_tokens)
+                    #profiler.disable()
+                    #profiler.print_stats(sort='time')
+
+                    res = token_ids[ids_offset:]
                     out = GenOut(response, history_len, input_len, gen_len, finish_reason, res)
 
                     if outputs.logprobs is not None:
@@ -909,3 +978,8 @@ class AsyncEngine(LogitsMixin):
             session.generator = None
 
         return session
+
+    def __del__(self):
+        """清理进程池."""
+        print('cleanup processpool')
+        self.executor.shutdown(wait=True)

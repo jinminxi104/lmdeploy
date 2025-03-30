@@ -721,7 +721,6 @@ class Engine:
         sampling_inputs = sampling_inputs.to_device('cuda')
         num_appendable_ids = num_appendable_ids.cuda()
         num_ignore_eos = num_ignore_eos.cuda()
-
         for idx in range(loop_count):
             # inference
             output = await self._async_model_forward(inputs,
@@ -965,6 +964,7 @@ class Engine:
                 prefill = False
                 schedule_output = self.scheduler.schedule(is_prefill=prefill, prealloc_size=prefill_interval)
 
+            # print(f"is_prefill {prefill}")
             in_que.put_nowait((prefill, schedule_output))
             finish = False
             while not finish:

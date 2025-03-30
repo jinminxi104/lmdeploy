@@ -114,12 +114,19 @@ class AscendOpsBackend(DlinferOpsBackend):
             is_unpaged_prefill = \
                 all((step_context.q_seqlens ==
                      step_context.kv_seqlens).tolist())
+        '''
         q_seqlens_list = step_context.q_seqlens.tolist()
         kv_seqlens_list = step_context.kv_seqlens.tolist()
         max_q_seq_len = max(q_seqlens_list)
         max_kv_seq_len = max(kv_seqlens_list)
+        '''
 
         if step_context.is_decoding:
+            # q_seqlens_list = step_context.q_seqlens.tolist()
+            # kv_seqlens_list = step_context.kv_seqlens.tolist()
+            max_q_seq_len = 1  # max(q_seqlens_list)
+            max_kv_seq_len = 1  # max(kv_seqlens_list)
+
             # collect kv_start_indices without using a for-loop,
             # (fill kv-cache for just ONE token during the decoding phase)
             idx = (step_context.kv_seqlens - 1) % block_size
@@ -127,6 +134,13 @@ class AscendOpsBackend(DlinferOpsBackend):
             last_block = step_context.block_offsets.gather(1, block_num.view(-1, 1)).view(-1)
             kv_start_indices = last_block * block_size + idx
         else:
+            q_seqlens_list = step_context.q_seqlens.tolist()
+            kv_seqlens_list = step_context.kv_seqlens.tolist()
+            max_q_seq_len = max(q_seqlens_list)
+            max_kv_seq_len = max(kv_seqlens_list)
+            '''
+            '''
+
             for i in range(step_context.q_start_loc.size(0)):
                 q_seq_len = q_seqlens_list[i]
                 kv_seq_len = kv_seqlens_list[i]
