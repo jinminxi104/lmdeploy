@@ -336,8 +336,8 @@ def fill_kv_cache(k_states: Tensor,
             BLOCK=BLOCK,
             BLOCK_D=BLOCK_D,
             BLOCK_DV=BLOCK_DV,
-            num_warps=4,
-            num_stages=3,
+            #num_warps=4,
+            #num_stages=3,
         )
     else:
         grid = [batch_size, max_num_blocks]
@@ -383,6 +383,6 @@ def fill_kv_cache(k_states: Tensor,
             BLOCK_D=BLOCK_D,
             BLOCK_DV=BLOCK_DV,
             BLOCK_H=BLOCK_H,
-            num_warps=4,
-            num_stages=3,
+            #num_warps=4,
+            #num_stages=3,
         )

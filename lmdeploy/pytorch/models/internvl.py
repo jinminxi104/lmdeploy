@@ -299,6 +299,7 @@ class InternVLChatModel(nn.Module, DeployModelMixin, CudaGraphMixin):
             self.vision_model = InternVisionModel(vision_config, dtype=dtype, device=device)
 
         self.language_model = build_model_from_hf_config(llm_config, dtype=dtype, device=device)
+        self.language_model = torch.compile(self.language_model)
 
         vit_hidden_size = config.vision_config.hidden_size
         llm_hidden_size = config.llm_config.hidden_size
@@ -317,6 +318,7 @@ class InternVLChatModel(nn.Module, DeployModelMixin, CudaGraphMixin):
 
         # for torch.compile, will call torch._dynamo.mark_dynamic to reduce recompile
         self.compile_dynamic_args = {"pixel_values": [0]}
+        #self.compile_modules = [self.vision_model, self.language_model]
 
     def pixel_shuffle(self, x, scale_factor=0.5):
         n, w, h, c = x.size()

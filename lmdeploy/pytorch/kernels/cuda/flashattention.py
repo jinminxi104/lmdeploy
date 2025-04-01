@@ -1,5 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import math
+#import math
 
 import torch
 import triton
@@ -75,7 +75,7 @@ def _prefill_fwd_inner(acc, l_i, m_i, q, k_ptrs, v_ptrs, q1, k1_ptrs, loop_start
         if causal_mask:
             qk *= sm_scale
             qk = softcapping(qk, logit_softcapping)
-            qk = qk * tl_log2(math.e)
+            qk = qk * tl_log2(2.718281828459045)
             qk_mask = (history_mask[:, None]) >= (start_n + offs_n[None, :])
             if window_size > 0:
                 qk_mask = qk_mask and ((start_n + offs_n[None, :]) >= kv_min_loc[:, None])
@@ -89,7 +89,7 @@ def _prefill_fwd_inner(acc, l_i, m_i, q, k_ptrs, v_ptrs, q1, k1_ptrs, loop_start
         elif window_size > 0:
             qk *= sm_scale
             qk = softcapping(qk, logit_softcapping)
-            qk = qk * tl_log2(math.e)
+            qk = qk * tl_log2(2.718281828459045)
             qk_mask = ((start_n + offs_n[None, :]) >= kv_min_loc[:, None])
             qk = tl.where(
                 qk_mask,
@@ -101,11 +101,11 @@ def _prefill_fwd_inner(acc, l_i, m_i, q, k_ptrs, v_ptrs, q1, k1_ptrs, loop_start
         elif logit_softcapping > 0:
             qk *= sm_scale
             qk = softcapping(qk, logit_softcapping)
-            qk = qk * tl_log2(math.e)
+            qk = qk * tl_log2(2.718281828459045)
             m_i_new = tl.maximum(m_i, tl.max(qk, 1))
             qk -= m_i_new[:, None]
         else:
-            qk_scale = sm_scale * tl_log2(math.e)
+            qk_scale = sm_scale * tl_log2(2.718281828459045)
             m_i_new = tl.maximum(m_i, tl.max(qk, 1) * qk_scale)
             qk = qk * qk_scale - m_i_new[:, None]
 
@@ -447,8 +447,8 @@ def flash_attention_fwd(
         BLOCK_DV=BLOCK_DV,
         BLOCK_M=BLOCK_M,
         BLOCK_N=BLOCK_N,
-        num_warps=num_warps,
-        num_stages=num_stages,
+        #num_warps=num_warps,
+        #num_stages=num_stages,
     )
 
     return o_states

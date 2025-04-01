@@ -32,7 +32,13 @@ else:
     tl_log2 = tl.math.log2
     tl_exp2 = tl.math.exp2
 
+@triton.jit
+def convert_pv(p, v):
+    """convert pv."""
+    p = p.to(v.dtype)
+    return p, v
 
+'''
 @triton.autotune(configs=[
     triton.Config({}, num_stages=2, num_warps=16),
     triton.Config({}, num_stages=2, num_warps=8),
@@ -74,6 +80,7 @@ else:
     BLOCK_H=torch.int32,
     BLOCK_DMODEL1=torch.int32,
 ))
+'''
 @triton.jit
 def _fwd_grouped_split_kernel(
     Q,
@@ -202,7 +209,7 @@ def _fwd_grouped_split_kernel(
             qk = qk / logit_softcapping
             qk = tanh(qk)
             qk = qk * logit_softcapping
-        qk = qk * tl_log2(math.e)
+        qk = qk * tl_log2(2.718281828459045)
         # NOTE: inf - inf = nan, and nan will leads to error
         if start_n + BLOCK_N > history_len or window_size > 0:
             qk_mask = history_len >= (start_n + offs_n)
@@ -225,7 +232,7 @@ def _fwd_grouped_split_kernel(
         acc = acc * alpha[:, None]
 
         # update acc
-        p, v = _convert_pv(p, v)
+        p, v = convert_pv(p, v)
         acc += tl.dot(p, v)
         # update m_i and l_i
         l_i = l_i_new
@@ -470,7 +477,7 @@ def _fwd_grouped_split_quant_kernel(
             qk = qk / logit_softcapping
             qk = tanh(qk)
             qk = qk * logit_softcapping
-        qk = qk * tl_log2(math.e)
+        qk = qk * tl_log2(2.718281828459045)
         # NOTE: inf - inf = nan, and nan will leads to error
         if start_n + BLOCK_N > history_len or window_size > 0:
             qk_mask = history_len >= (start_n + offs_n)
@@ -493,7 +500,7 @@ def _fwd_grouped_split_quant_kernel(
         acc = acc * alpha[:, None]
 
         # update acc
-        p, v = _convert_pv(p, v)
+        p, v = convert_pv(p, v)
         acc += tl.dot(p, v)
         # update m_i and l_i
         l_i = l_i_new
@@ -572,18 +579,7 @@ def _reduce_split_kernel(
     tl.store(Out + out_offs, acc, mask=mask_dv)
 
 
-def _get_convert_pv(nv_capability):
-    """lazy load convert_pv."""
-    global TRITON_VERSION, VERSION_300
-    if TRITON_VERSION >= VERSION_300 or nv_capability[0] >= 8:
-
-        @triton.jit
-        def convert_pv(p, v):
-            """convert pv."""
-            p = p.to(v.dtype)
-            return p, v
-    else:
-
+'''
         @triton.jit
         def convert_pv(p, v):
             """convert pv."""
@@ -591,10 +587,7 @@ def _get_convert_pv(nv_capability):
             return p, v
 
     return convert_pv
-
-
-_convert_pv = None
-_nv_cap = None
+'''
 
 
 def paged_attention_fwd(
@@ -625,12 +618,6 @@ def paged_attention_fwd(
         max_seqlen (int): The max input length.
         BLOCK (int): The kernel block size.
     """
-    global _convert_pv, _nv_cap
-    if _convert_pv is None:
-        nv_cap = torch.cuda.get_device_capability()
-        _nv_cap = nv_cap
-        _convert_pv = _get_convert_pv(nv_cap)
-
     if kv_layout == 'bshd':
         b_dim, s_dim, h_dim, d_dim = (0, 1, 2, 3)
     elif kv_layout == 'bhsd':
@@ -738,7 +725,8 @@ def paged_attention_fwd(
                                               BLOCK_N=BLOCK,
                                               BLOCK_H=BLOCK_H,
                                               BLOCK_DMODEL1=BLOCK_DMODEL1,
-                                              **kernel_meta)
+                                              #**kernel_meta
+                                              )
 
     else:
         _fwd_grouped_split_kernel[grid](q,
@@ -776,7 +764,8 @@ def paged_attention_fwd(
                                         BLOCK_N=BLOCK,
                                         BLOCK_H=BLOCK_H,
                                         BLOCK_DMODEL1=BLOCK_DMODEL1,
-                                        **kernel_meta)
+                                        #**kernel_meta
+                                        )
 
     num_warps = 4
     grid = (batch, head)
@@ -795,6 +784,7 @@ def paged_attention_fwd(
                                SPLIT_K=SPLIT_K,
                                head_size_v=Lv,
                                BLOCK_DV=BLOCK_DV,
-                               num_warps=num_warps,
-                               num_stages=1,
-                               **kernel_meta)
+                               #num_warps=num_warps,
+                               #num_stages=1,
+                               #**kernel_meta
+                               )
