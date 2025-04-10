@@ -206,7 +206,6 @@ class InternVisionEncoderLayer(nn.Module):
         self.ls1 = nn.Parameter(torch.empty(self.embed_dim, dtype=dtype, device=device))
         self.ls2 = nn.Parameter(torch.empty(self.embed_dim, dtype=dtype, device=device))
 
-
     @enable_micro_batch
     def _attn(self, hidden_states):
         hidden_states = hidden_states + self.attn(self.norm1(hidden_states).to(hidden_states[0].dtype)) * self.ls1
@@ -299,7 +298,8 @@ class InternVLChatModel(nn.Module, DeployModelMixin, CudaGraphMixin):
             self.vision_model = InternVisionModel(vision_config, dtype=dtype, device=device)
 
         self.language_model = build_model_from_hf_config(llm_config, dtype=dtype, device=device)
-        self.language_model = torch.compile(self.language_model)
+        self.language_model = torch.compile(self.language_model, fullgraph=True)
+        #self.language_model = torch.compile(self.language_model, fullgraph=True, mode='max-autotune')
 
         vit_hidden_size = config.vision_config.hidden_size
         llm_hidden_size = config.llm_config.hidden_size
@@ -317,7 +317,7 @@ class InternVLChatModel(nn.Module, DeployModelMixin, CudaGraphMixin):
         self.input_processor = InternVLInputProcessor(self.config, dtype)
 
         # for torch.compile, will call torch._dynamo.mark_dynamic to reduce recompile
-        self.compile_dynamic_args = {"pixel_values": [0]}
+        self.compile_dynamic_args = {'pixel_values': [0]}
         #self.compile_modules = [self.vision_model, self.language_model]
 
     def pixel_shuffle(self, x, scale_factor=0.5):

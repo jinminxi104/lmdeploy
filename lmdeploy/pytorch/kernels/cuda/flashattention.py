@@ -397,7 +397,7 @@ def flash_attention_fwd(
 
     BLOCK_DK, BLOCK_DK1, BLOCK_DV = _get_block_d(head_dim_k, head_dim_v)
 
-    shared_kv = k_states.data_ptr() == v_states.data_ptr() and BLOCK_DK == BLOCK_DV
+    shared_kv = False  #k_states.data_ptr() == v_states.data_ptr() and BLOCK_DK == BLOCK_DV
 
     BLOCK_N = 32
     if _nv_cap[0] < 8:

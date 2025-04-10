@@ -134,10 +134,10 @@ def apply_rotary_pos_emb(q: Tensor,
     num_stages = 1
 
     kernel_meta = get_kernel_meta(q)
-    grid = [
+    grid = (
         num_heads_q + num_heads_k,
         triton.cdiv(seq_len, BLOCK),
-    ]
+    )
     apply_rotary_pos_emb_qk_kernel[grid](q,
                                          k,
                                          cos,

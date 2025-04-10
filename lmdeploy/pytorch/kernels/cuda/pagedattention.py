@@ -32,21 +32,25 @@ else:
     tl_log2 = tl.math.log2
     tl_exp2 = tl.math.exp2
 
+
 @triton.jit
 def convert_pv(p, v):
     """convert pv."""
     p = p.to(v.dtype)
     return p, v
 
-'''
-@triton.autotune(configs=[
-    triton.Config({}, num_stages=2, num_warps=16),
-    triton.Config({}, num_stages=2, num_warps=8),
-    triton.Config({}, num_stages=2, num_warps=4),
-],
-                 key=['BLOCK_H', 'BLOCK_N', 'BLOCK_DMODEL', 'BLOCK_DV'],
-                 warmup=10,
-                 rep=25)
+
+@triton.autotune(
+    configs=[
+        triton.Config({}, num_stages=2, num_warps=16),
+        triton.Config({}, num_stages=2, num_warps=8),
+        triton.Config({}, num_stages=2, num_warps=4),
+    ],
+    key=['BLOCK_H', 'BLOCK_N', 'BLOCK_DMODEL', 'BLOCK_DV'],
+)
+# torch.compile only support config and key in @triton.autotune
+#warmup=10,
+#                rep=25)
 @wrap_jit_func(type_hint=dict(
     Q=torch.Tensor,
     K=torch.Tensor,
@@ -80,7 +84,6 @@ def convert_pv(p, v):
     BLOCK_H=torch.int32,
     BLOCK_DMODEL1=torch.int32,
 ))
-'''
 @triton.jit
 def _fwd_grouped_split_kernel(
     Q,
@@ -679,112 +682,115 @@ def paged_attention_fwd(
         batch,
     )
     if quant_policy > 0:
-        _fwd_grouped_split_quant_kernel[grid](q,
-                                              k,
-                                              v,
-                                              k_scales_zeros,
-                                              v_scales_zeros,
-                                              sm_scale,
-                                              kv_seqlens,
-                                              block_offsets,
-                                              acc,
-                                              stride_qbs=q.stride(-3),
-                                              stride_qh=q.stride(-2),
-                                              stride_qd=q.stride(-1),
-                                              stride_kp=k.stride(b_dim),
-                                              stride_kbs=k.stride(s_dim),
-                                              stride_kh=k.stride(h_dim),
-                                              stride_kd=k.stride(d_dim),
-                                              stride_vp=v.stride(b_dim),
-                                              stride_vbs=v.stride(s_dim),
-                                              stride_vh=v.stride(h_dim),
-                                              stride_vd=v.stride(d_dim),
-                                              stride_kszp=k_scales_zeros.stride(b_dim),
-                                              stride_kszbs=k_scales_zeros.stride(s_dim),
-                                              stride_kszh=k_scales_zeros.stride(h_dim),
-                                              stride_kszd=k_scales_zeros.stride(d_dim),
-                                              stride_vszp=v_scales_zeros.stride(b_dim),
-                                              stride_vszbs=v_scales_zeros.stride(s_dim),
-                                              stride_vszh=v_scales_zeros.stride(h_dim),
-                                              stride_vszd=v_scales_zeros.stride(d_dim),
-                                              quant_policy=quant_policy,
-                                              stride_ok=acc.stride(-2),
-                                              stride_obs=acc.stride(-4),
-                                              stride_oh=acc.stride(-3),
-                                              stride_od=acc.stride(-1),
-                                              stride_boffb=block_offsets.stride(0),
-                                              kv_group_num=kv_group_num,
-                                              window_size=window_size,
-                                              head_size=Lq,
-                                              head_size_v=Lv,
-                                              num_heads_q=head,
-                                              logit_softcapping=logit_softcapping,
-                                              SPLIT_K=SPLIT_K,
-                                              BLOCK_DMODEL=BLOCK_DMODEL,
-                                              BLOCK_DV=BLOCK_DV,
-                                              BLOCK_N=BLOCK,
-                                              BLOCK_H=BLOCK_H,
-                                              BLOCK_DMODEL1=BLOCK_DMODEL1,
-                                              #**kernel_meta
-                                              )
+        _fwd_grouped_split_quant_kernel[grid](
+            q,
+            k,
+            v,
+            k_scales_zeros,
+            v_scales_zeros,
+            sm_scale,
+            kv_seqlens,
+            block_offsets,
+            acc,
+            stride_qbs=q.stride(-3),
+            stride_qh=q.stride(-2),
+            stride_qd=q.stride(-1),
+            stride_kp=k.stride(b_dim),
+            stride_kbs=k.stride(s_dim),
+            stride_kh=k.stride(h_dim),
+            stride_kd=k.stride(d_dim),
+            stride_vp=v.stride(b_dim),
+            stride_vbs=v.stride(s_dim),
+            stride_vh=v.stride(h_dim),
+            stride_vd=v.stride(d_dim),
+            stride_kszp=k_scales_zeros.stride(b_dim),
+            stride_kszbs=k_scales_zeros.stride(s_dim),
+            stride_kszh=k_scales_zeros.stride(h_dim),
+            stride_kszd=k_scales_zeros.stride(d_dim),
+            stride_vszp=v_scales_zeros.stride(b_dim),
+            stride_vszbs=v_scales_zeros.stride(s_dim),
+            stride_vszh=v_scales_zeros.stride(h_dim),
+            stride_vszd=v_scales_zeros.stride(d_dim),
+            quant_policy=quant_policy,
+            stride_ok=acc.stride(-2),
+            stride_obs=acc.stride(-4),
+            stride_oh=acc.stride(-3),
+            stride_od=acc.stride(-1),
+            stride_boffb=block_offsets.stride(0),
+            kv_group_num=kv_group_num,
+            window_size=window_size,
+            head_size=Lq,
+            head_size_v=Lv,
+            num_heads_q=head,
+            logit_softcapping=logit_softcapping,
+            SPLIT_K=SPLIT_K,
+            BLOCK_DMODEL=BLOCK_DMODEL,
+            BLOCK_DV=BLOCK_DV,
+            BLOCK_N=BLOCK,
+            BLOCK_H=BLOCK_H,
+            BLOCK_DMODEL1=BLOCK_DMODEL1,
+            #**kernel_meta
+        )
 
     else:
-        _fwd_grouped_split_kernel[grid](q,
-                                        k,
-                                        v,
-                                        sm_scale,
-                                        kv_seqlens,
-                                        block_offsets,
-                                        acc,
-                                        stride_qbs=q.stride(-3),
-                                        stride_qh=q.stride(-2),
-                                        stride_qd=q.stride(-1),
-                                        stride_kp=k.stride(b_dim),
-                                        stride_kbs=k.stride(s_dim),
-                                        stride_kh=k.stride(h_dim),
-                                        stride_kd=k.stride(d_dim),
-                                        stride_vp=v.stride(b_dim),
-                                        stride_vbs=v.stride(s_dim),
-                                        stride_vh=v.stride(h_dim),
-                                        stride_vd=v.stride(d_dim),
-                                        stride_ok=acc.stride(-2),
-                                        stride_obs=acc.stride(-4),
-                                        stride_oh=acc.stride(-3),
-                                        stride_od=acc.stride(-1),
-                                        stride_boffb=block_offsets.stride(0),
-                                        kv_group_num=kv_group_num,
-                                        window_size=window_size,
-                                        head_size=Lk,
-                                        head_size_v=Lv,
-                                        num_heads_q=head,
-                                        logit_softcapping=logit_softcapping,
-                                        SPLIT_K=SPLIT_K,
-                                        BLOCK_DMODEL=BLOCK_DMODEL,
-                                        BLOCK_DV=BLOCK_DV,
-                                        BLOCK_N=BLOCK,
-                                        BLOCK_H=BLOCK_H,
-                                        BLOCK_DMODEL1=BLOCK_DMODEL1,
-                                        #**kernel_meta
-                                        )
+        _fwd_grouped_split_kernel[grid](
+            q,
+            k,
+            v,
+            sm_scale,
+            kv_seqlens,
+            block_offsets,
+            acc,
+            stride_qbs=q.stride(-3),
+            stride_qh=q.stride(-2),
+            stride_qd=q.stride(-1),
+            stride_kp=k.stride(b_dim),
+            stride_kbs=k.stride(s_dim),
+            stride_kh=k.stride(h_dim),
+            stride_kd=k.stride(d_dim),
+            stride_vp=v.stride(b_dim),
+            stride_vbs=v.stride(s_dim),
+            stride_vh=v.stride(h_dim),
+            stride_vd=v.stride(d_dim),
+            stride_ok=acc.stride(-2),
+            stride_obs=acc.stride(-4),
+            stride_oh=acc.stride(-3),
+            stride_od=acc.stride(-1),
+            stride_boffb=block_offsets.stride(0),
+            kv_group_num=kv_group_num,
+            window_size=window_size,
+            head_size=Lk,
+            head_size_v=Lv,
+            num_heads_q=head,
+            logit_softcapping=logit_softcapping,
+            SPLIT_K=SPLIT_K,
+            BLOCK_DMODEL=BLOCK_DMODEL,
+            BLOCK_DV=BLOCK_DV,
+            BLOCK_N=BLOCK,
+            BLOCK_H=BLOCK_H,
+            BLOCK_DMODEL1=BLOCK_DMODEL1,
+            #**kernel_meta
+        )
 
     num_warps = 4
     grid = (batch, head)
     if quant_policy == 4:
         Lv *= 2
         BLOCK_DV *= 2
-    _reduce_split_kernel[grid](acc,
-                               o,
-                               stride_ak=acc.stride(2),
-                               stride_abs=acc.stride(0),
-                               stride_ah=acc.stride(1),
-                               stride_ad=acc.stride(3),
-                               stride_obs=o.stride(0),
-                               stride_oh=o.stride(1),
-                               stride_od=o.stride(2),
-                               SPLIT_K=SPLIT_K,
-                               head_size_v=Lv,
-                               BLOCK_DV=BLOCK_DV,
-                               #num_warps=num_warps,
-                               #num_stages=1,
-                               #**kernel_meta
-                               )
+    _reduce_split_kernel[grid](
+        acc,
+        o,
+        stride_ak=acc.stride(2),
+        stride_abs=acc.stride(0),
+        stride_ah=acc.stride(1),
+        stride_ad=acc.stride(3),
+        stride_obs=o.stride(0),
+        stride_oh=o.stride(1),
+        stride_od=o.stride(2),
+        SPLIT_K=SPLIT_K,
+        head_size_v=Lv,
+        BLOCK_DV=BLOCK_DV,
+        #num_warps=num_warps,
+        #num_stages=1,
+        #**kernel_meta
+    )

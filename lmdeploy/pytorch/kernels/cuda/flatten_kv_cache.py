@@ -235,7 +235,7 @@ def flatten_kv_cache(k_caches: Tensor,
 
     grid = (num_blocks, batch_size, num_heads)
     if quant_policy == 0:
-        shared_kv = k_caches.data_ptr() == v_caches.data_ptr() and v_head_dim < k_head_dim
+        shared_kv = False  # k_caches.data_ptr() == v_caches.data_ptr() and v_head_dim < k_head_dim
         if shared_kv:
             v_states = k_states[..., :v_head_dim]
             v_head_dim = 0
