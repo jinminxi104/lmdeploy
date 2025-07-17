@@ -611,6 +611,7 @@ class MoEGate(nn.Module):
         """forward."""
         sequence_length, hidden_dim = hidden_states.shape
         router_logits = F.linear(hidden_states, self.weight)
+        # return router_logits
         if self.fake_eplb:
             # Forcefully manipulate router_logits to simulate expert load balancing (EPLB).
             # This is a benchmark-only hack to achieve optimal performance metrics.
@@ -657,7 +658,7 @@ class MoEGate(nn.Module):
 
         if self.eplb_dispatch_info is not None:
             topk_idx = EPLBManager.topk_ids_logical_to_physical(topk_idx, self.eplb_dispatch_info)
-
+        # print("!!!!topk_weight, topk_idx!!!!!!", flush=True)
         return topk_weight, topk_idx
 
 
@@ -703,6 +704,25 @@ class DeepseekV2MoE(nn.Module):
             quant_config=quantization_config,
             layer_idx=layer_idx,
         )
+
+        # from sglang.srt.layers.moe.ep_moe.layer import EPMoE
+        # self.e_score_correction_bias = nn.Parameter(torch.empty((config.n_routed_experts, ),
+        #                                             dtype=dtype, device=device))
+
+        # self.tmp_experts = EPMoE(
+        #     num_experts=config.n_routed_experts + self.n_share_experts_fusion,
+        #     top_k=config.num_experts_per_tok + min(self.n_share_experts_fusion, 1),
+        #     hidden_size=config.hidden_size,
+        #     intermediate_size=config.moe_intermediate_size,
+        #     renormalize=config.norm_topk_prob,
+        #     quant_config=quantization_config,
+        #     use_grouped_topk=True,
+        #     num_expert_group=config.n_group,
+        #     topk_group=config.topk_group,
+        #     correction_bias=self.e_score_correction_bias,
+        #     prefix="experts",
+        # )
+
         self.shared_experts = None
         if config.n_shared_experts is not None:
             intermediate_size = (config.moe_intermediate_size * config.n_shared_experts)
@@ -714,6 +734,8 @@ class DeepseekV2MoE(nn.Module):
                 is_shared_expert=True,
             )
 
+        # print("dp - world_size", dp, world_size, flush=True)
+        # if world_size > 1:
         if dp == 1 and world_size > 1:
             self._all_reduce = True
         else:
@@ -729,12 +751,19 @@ class DeepseekV2MoE(nn.Module):
             topk_weights,
             topk_ids,
         )
+        # router_logits = self.gate(hidden_states)
+        # out_states = self.tmp_experts(
+        #     hidden_states,
+        #     router_logits
+        # )
+        # print("running after tmp_experts...", flush=True)
 
         if self.shared_experts is not None:
             shared_states = self.shared_experts(hidden_states)
             out_states += shared_states
         out_states = out_states.reshape(batch_size, sequence_length, -1)
 
+        # if True:
         if self._all_reduce:
             dist.all_reduce(out_states)
 
@@ -1386,6 +1415,7 @@ class DeepseekV2ForCausalLM(nn.Module, CudaGraphMixin):
                 continue
 
             if '.experts' in name:
+                # pass
                 self._load_weight_experts(name, loaded_weight, params_dict, expert_params_mapping=expert_params_mapping)
             elif '.self_attn' in name and getattr(config, 'use_mla', True):
                 # attention
