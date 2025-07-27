@@ -210,11 +210,11 @@ class FusedMoE(nn.Module):
             dtype = torch.float16
         ep_size, rank = get_ep_world_rank()
         impl_builder = get_backend().get_layer_impl_builder(OpType.FusedMoE)
-        print('ep_size, rank:', ep_size, rank, flush=True)
+        #print('ep_size, rank:', ep_size, rank, flush=True)
         self.impl = impl_builder.build(top_k, num_experts, renormalize, ep_size)
 
         enable_ep = self.impl.support_ep() and ep_size != 1
-        print('enable_ep', enable_ep, flush=True)
+        #print('enable_ep', enable_ep, flush=True)
 
         if enable_ep:
             expert_list = self.impl.ep_expert_list(ep_size, rank)
@@ -270,13 +270,13 @@ class FusedMoE(nn.Module):
                                 self.expert_list)
 
         dist_ctx = get_dist_manager().current_context()
-        print('self.all_reduce', self.all_reduce, dist_ctx, flush=True)
+        #print('self.all_reduce', self.all_reduce, dist_ctx, flush=True)
         # dist.all_reduce(ret, group="tp")
-        print('before:', flush=True)
+        #print('before:', flush=True)
         if self.all_reduce:
             ret = _moe_reduce(ret, False)
             # ret = _moe_reduce(ret, self.enable_ep)
-        print('after:', flush=True)
+        #print('after:', flush=True)
 
         return ret
 

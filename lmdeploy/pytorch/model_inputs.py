@@ -12,6 +12,9 @@ from lmdeploy.pytorch.backends import get_backend
 from lmdeploy.pytorch.config import ModelConfig
 from lmdeploy.pytorch.multimodal.data_type import MultiModalTensor
 
+import flashinfer
+from typing import Any
+
 
 def _broadcast_tensor(value: torch.Tensor, src: int = 0, device: str = 'cuda'):
     """Broadcast tensor."""
@@ -344,6 +347,7 @@ class StepContext:
     model_metas: List[Dict[str, Any]] = None
     dp_meta: DPMeta = None
     enable_microbatch: bool = False
+    paged_wrapper: Any = None
 
     _outputs: Dict = field(default_factory=dict)
 
@@ -398,6 +402,11 @@ class StepContext:
         # seq_len + history_length
         kv_seqlens = q_seqlens + history_seqlens
         kv_seqlens -= inputs.num_ignored_history
+        paged_wrapper = flashinfer.mla.BatchMLAPagedAttentionWrapper(
+            torch.empty(128 * 1024 * 1024, dtype=torch.int8).to(0),
+            backend="auto"
+        )
+        #paged_wrapper = None
 
         ret = StepContext(
             input_ids=inputs.input_ids,
@@ -420,6 +429,7 @@ class StepContext:
             cross_seqlens=cross_seqlens,
             cross_kv_seqlens=cross_kv_seqlens,
             dp_meta=inputs.dp_meta,
+            paged_wrapper = paged_wrapper,
         )
 
         ret = get_backend().update_step_context(ret)

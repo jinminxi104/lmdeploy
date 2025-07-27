@@ -28,7 +28,8 @@ class MacaOpsBackend(DlinferOpsBackend):
         dtype: torch.dtype,
     ) -> Tuple[int, ...]:
         x = 16
-        return (num_heads, head_size // x, block_size, x)
+        #return (num_heads, head_size // x, block_size, x)
+        return (num_heads, block_size, head_size)
 
     @staticmethod
     def get_v_block_shape(
@@ -73,6 +74,52 @@ class MacaOpsBackend(DlinferOpsBackend):
             b_num = (step_context.kv_seqlens - 1) // block_size
             last_block = step_context.block_offsets.gather(1, b_num.view(-1, 1)).view(-1)
             kv_start_indices = (last_block * block_size + idx).reshape((-1, 1))
+
+            '''
+            q_indptr = torch.arange(0, kv_seqlens.shape[0] + 1).int().cuda()
+            kv_indptr = torch.cat((torch.tensor([0], device=device), step_context.kv_seqlens.cumsum(0))).int()
+            kv_indices = torch.arange(0, 999).int().cuda()
+            #kv_indices = step_context.block_offsets
+            kv_lens = kv_seqlens
+            num_local_heads = 16
+            head_dim_ckv = 512
+            head_dim_kpe = 64
+            page_size = 1
+            sm_scale = 0.114721386792
+            '''
+            #q_indptr = torch.tensor([0, 1]).int().cuda()
+            q_indptr = torch.arange(0, kv_seqlens.shape[0] + 1).int().cuda()
+            kv_indptr = ((torch.cat((torch.tensor([0], device=device), step_context.kv_seqlens.cumsum(0))).int() + 15) // 16).int()
+            #kv_indices = torch.arange(0, 999).int().cuda()
+            kv_indices = step_context.block_offsets.int().cuda()
+            kv_lens = kv_seqlens
+            num_local_heads = 16
+            head_dim_ckv = 512
+            head_dim_kpe = 64
+            page_size = 16
+            sm_scale = 0.114721386792
+
+
+            #import fpdb;fpdb.ForkedPdb().set_trace()
+            print(f"q ind {q_indptr}", flush=True)
+            print(f"kv ind {kv_indptr}", flush=True)
+            print(f"kv indixc {kv_indices}", flush=True)
+            print(f"kv lennnc {kv_lens}", flush=True)
+  
+            step_context.paged_wrapper.plan(
+                q_indptr,
+                kv_indptr,
+                kv_indices,
+                kv_lens,
+                num_local_heads,
+                head_dim_ckv,
+                head_dim_kpe,
+                page_size,
+                False,  # causal
+                sm_scale,
+                torch.bfloat16,
+                torch.bfloat16,
+            )
         else:
             for i in range(step_context.q_start_loc.size(0)):
                 q_seq_len = int(step_context.q_seqlens[i])
@@ -98,6 +145,7 @@ class MacaOpsBackend(DlinferOpsBackend):
             is_unpaged_prefill=is_unpaged_prefill,
             max_q_seq_len=max_q_seq_len,
             max_kv_seq_len=max_kv_seq_len,
+            flashinfer_wrapper = step_context.paged_wrapper
         )
 
         step_context.attn_metadata = attn_metadata
