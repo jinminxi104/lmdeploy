@@ -31,6 +31,7 @@ from ..utils import get_gpu_memory
 from ..weight_loader.model_weight_loader import load_model_weights
 from .cache_engine import CacheEngine
 from .logits_process import FusedLogitsProcessor, SamplingInputs
+import torch_npu
 
 logger = get_logger('lmdeploy')
 
@@ -392,6 +393,7 @@ class BaseModelAgent:
     def warmup(self):
         """warmup."""
         # TODO: disable for now, do not remove the comments.
+        print("warmup start", flush=True)
         with self.all_context():
             max_batches = self.cache_config.max_batches
             num_tokens = max_batches
@@ -412,6 +414,7 @@ class BaseModelAgent:
                                                          device='cuda',
                                                          vocab_size=self.model_config.vocab_size)
                 self._forward_impl(inputs)
+        print("warmup end  ", flush=True)
 
     def _slice_outs(self, inputs: torch.Tensor, seq_length: torch.LongTensor):
         """Slice outputs."""
@@ -687,6 +690,7 @@ class BaseModelAgent:
                 return_logits=return_logits,
                 sync_long_context=sync_long_context,
             )
+
             logits = output['logits']
             logits = logits[0]  # [bs, seq, prob] -> [seq, prob]
             seq_length = inputs.seq_length
@@ -707,7 +711,7 @@ class BaseModelAgent:
                 next_token_ids, logprobs = await self.async_sampling_logits(last_logits, sampling_inputs, inputs)
 
                 with self._broadcast_next_token(next_token_ids, dist_ctx, enable=need_broadcast_next):
-                    logger.debug(f'<ForwardTask> rank[{rank}]: synchronize token ids [{idx}]')
+                    logger.debug(f'<ForwardTask, need output> rank[{rank}]: synchronize token ids [{idx}]')
 
                     # post sampling
                     next_token_ids, extra_inputs = self.agent_strategy.post_sampling(
@@ -727,7 +731,7 @@ class BaseModelAgent:
 
                 # broadcast next token for TP > 1
                 with self._broadcast_next_token(next_token_ids, dist_ctx, enable=need_broadcast_next):
-                    logger.debug(f'<ForwardTask> rank[{rank}]: synchronize token ids [{idx}]')
+                    logger.debug(f'<ForwardTask no need output> rank[{rank}]: synchronize token ids [{idx}]')
 
                 # post sampling
                 next_token_ids, extra_inputs = self.agent_strategy.post_sampling(inputs, last_logits, next_token_ids,
