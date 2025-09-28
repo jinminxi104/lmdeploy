@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import torch
 import torch.distributed as dist
+import torch_npu
 from torch.profiler import ProfilerActivity, profile, record_function
 
 from lmdeploy.pytorch.disagg.config import EngineRole
@@ -31,7 +32,6 @@ from ..utils import get_gpu_memory
 from ..weight_loader.model_weight_loader import load_model_weights
 from .cache_engine import CacheEngine
 from .logits_process import FusedLogitsProcessor, SamplingInputs
-import torch_npu
 
 logger = get_logger('lmdeploy')
 
@@ -393,7 +393,7 @@ class BaseModelAgent:
     def warmup(self):
         """warmup."""
         # TODO: disable for now, do not remove the comments.
-        print("warmup start", flush=True)
+        print('warmup start', flush=True)
         with self.all_context():
             max_batches = self.cache_config.max_batches
             num_tokens = max_batches
@@ -414,7 +414,7 @@ class BaseModelAgent:
                                                          device='cuda',
                                                          vocab_size=self.model_config.vocab_size)
                 self._forward_impl(inputs)
-        print("warmup end  ", flush=True)
+        print('warmup end  ', flush=True)
 
     def _slice_outs(self, inputs: torch.Tensor, seq_length: torch.LongTensor):
         """Slice outputs."""
