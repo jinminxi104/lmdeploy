@@ -237,6 +237,7 @@ def model_forward(
         )
         with ctx_mgr.context(context):
             model_metas = None
+            #import pdb; pdb.set_trace()
             model_metas = model.update_model_metas(
                 past_key_values=cache_engine.gpu_cache,
                 context=context,
@@ -245,6 +246,7 @@ def model_forward(
                 past_key_values=cache_engine.gpu_cache,
                 context=context,
             )
+            #print(f"5555555: {input_dict}")
             output = model(**input_dict)
 
             # InternVL-3.5-Flash will change the seqlen, model_metas during forward
@@ -697,6 +699,7 @@ class BaseModelAgent:
         for idx in range(loop_count):
             # inference
             logger.debug(f'<ForwardTask> rank[{rank}]: model forward [{idx}].')
+            #print(f"1111111: {inputs}")
             output = await self._async_model_forward(
                 inputs,
                 return_logits=return_logits,
@@ -777,6 +780,7 @@ class BaseModelAgent:
 
                 if forward_event is not None:
                     forward_event.clear()
+                #print(f"22222221: {forward_inputs}")
                 await self._async_step_background(**forward_inputs, )
                 if forward_event is not None:
                     forward_event.set()
@@ -974,6 +978,7 @@ class BaseModelAgent:
                                             cache_stream=self.cache_stream)
 
     def _forward_impl(self, inputs: ModelInputs):
+        #print(f"3333333: {inputs}")
         output = model_forward(
             self.patched_model,
             inputs,

@@ -194,7 +194,7 @@ class ExecutorBase:
         logger.info(f'Building CacheEngine with config: \n{self.cache_config}.')
         self.build_cache_engine()
         logger.info('Warming up model.')
-        self.warmup()
+        #self.warmup()
 
     @contextlib.contextmanager
     def remote_log(self, msg: str):

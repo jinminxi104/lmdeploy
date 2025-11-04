@@ -21,6 +21,7 @@ from .utils.model import DeployModelMixin, vlm_model
 
 def _apply_mrope_selection(hidden_states: torch.Tensor, mrope_position_ids: torch.Tensor, mrope_section: List[int],
                            position_ids: torch.Tensor, rotary_emb_func: Callable):
+    print('!!!!!!_apply_mrope_selection!!!!!!', flush=True)
     _mrope_position_ids = torch.zeros(3, position_ids.shape[-1], dtype=position_ids.dtype, device=position_ids.device)
     _mrope_position_ids[:, :mrope_position_ids.shape[-1]] = mrope_position_ids
     cos, sin = rotary_emb_func(hidden_states, _mrope_position_ids)
@@ -28,6 +29,7 @@ def _apply_mrope_selection(hidden_states: torch.Tensor, mrope_position_ids: torc
     _sin = torch.zeros_like(_cos)
     mrope_section = mrope_section * 2
 
+    #import pdb; pdb.set_trace()
     def _apply_split(src, dst):
         start = 0
         for i, m in enumerate(src.split(mrope_section, dim=-1)):
@@ -38,6 +40,30 @@ def _apply_mrope_selection(hidden_states: torch.Tensor, mrope_position_ids: torc
     _apply_split(sin, _sin)
 
     return _cos, _sin
+
+
+def _apply_mrope_selection_new(hidden_states: torch.Tensor, mrope_position_ids: torch.Tensor, mrope_section: List[int],
+                               position_ids: torch.Tensor, rotary_emb_func: Callable):
+    print('!!!!!!_apply_mrope_selection_new!!!!!!', flush=True)
+
+    def _compute_inv_freq(base: float) -> torch.Tensor:
+        """Compute the inverse frequency."""
+        # NOTE(woosuk): To exactly match the HF implementation, we need to
+        # use CPU to compute the cache and then move it to GPU. However, we
+        # create the cache on GPU for faster initialization. This may cause
+        # a slight numerical difference between the HF implementation and ours.
+        inv_freq = 1.0 / (base**(torch.arange(0, 64, 2, dtype=torch.float) / 64))
+        return inv_freq
+
+    """Compute the cos and sin cache."""
+    inv_freq = _compute_inv_freq(1000000.0)
+    t = torch.arange(16 * 1024, dtype=torch.float)
+
+    freqs = torch.einsum('i,j -> ij', t, inv_freq)
+    cos = freqs.cos()
+    sin = freqs.sin()
+    cache = torch.cat((cos, sin), dim=-1)
+    return cache
 
 
 class Qwen2Attention(nn.Module):
@@ -94,6 +120,7 @@ class Qwen2Attention(nn.Module):
         """Rewrite of LlamaAttention.forward."""
         # qkv proj
         qkv_states = self.qkv_proj(hidden_states)
+
         # (-1, heads, head_dim)
         qkv_states = qkv_states.flatten(0, -2)
         query_states, key_states, value_states = self.qkv_proj.split_qkv(qkv_states)
@@ -107,6 +134,8 @@ class Qwen2Attention(nn.Module):
             sin,
             inplace=True,
         )
+        #if query_states.shape[0] == 1:
+        #    import pdb; pdb.set_trace()
 
         # attention
         attn_output = self.attn_fwd(
@@ -271,13 +300,22 @@ class Qwen2Model(nn.Module):
         hidden_states = inputs_embeds
 
         # rotary embedding
+        #import pdb; pdb.set_trace()
         if mrope_position_ids is None:
+            #print("!!!!!!None mrope_position_ids!!!!!!", flush=True)
+            assert (0)
             cos, sin = self.rotary_emb(hidden_states, position_ids)
             cos, sin = cos[0], sin[0]
         else:
             cos, sin = _apply_mrope_selection(hidden_states, mrope_position_ids, self.mrope_section, position_ids,
                                               self.rotary_emb)
+            #new_mrope = _apply_mrope_selection_new(hidden_states, mrope_position_ids, self.mrope_section, position_ids,
+            #                                  self.rotary_emb)
+        #rotary_pos_emb = (new_mrope, mrope_position_ids)
         rotary_pos_emb = (cos, sin)
+        """print('mrope_position_ids', flush=True) print(mrope_position_ids,
+        flush=True) print('position_ids', flush=True) print(position_ids,
+        flush=True) print("cos", flush=True) print(cos.shape, flush=True)"""
 
         # decoding
         residual = None
@@ -399,8 +437,11 @@ class VisionAttention(nn.Module):
         qkv_states = qkv_states.flatten(0, -2)
         q, k, v = self.qkv.split_qkv(qkv_states)
 
-        cos, sin = rotary_pos_emb
-        q, k = self.apply_rotary_pos_emb(q, k, cos, sin)
+        # cos, sin = rotary_pos_emb
+        # q, k = self.apply_rotary_pos_emb(q, k, cos, sin)
+
+        cossincache, pos = rotary_pos_emb
+        q, k = self.apply_rotary_pos_emb(q, k, cossincache, pos)
 
         attn_output = self.attention(
             q,
@@ -648,6 +689,10 @@ class Qwen2VLForConditionalGeneration(nn.Module, DeployModelMixin, CudaGraphMixi
         image_mask: torch.Tensor = None,
         **kwargs,
     ):
+        """print("input_ids", flush=True) print(input_ids, flush=True)
+        print('positions', flush=True) print(position_ids, flush=True)
+        print('pixel', flush=True) print(pixel_values, flush=True)
+        print('inputs_embeds', flush=True) print(inputs_embeds, flush=True)"""
         """Model forward, return logits."""
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -657,7 +702,18 @@ class Qwen2VLForConditionalGeneration(nn.Module, DeployModelMixin, CudaGraphMixi
                 vis_pos_emb = (vis_pos_emb[0].to(dtype), vis_pos_emb[1].to(dtype))
                 image_embeds = self.visual(pixel_values, cu_seqlens=vis_cu_seqlens, rotary_pos_emb=vis_pos_emb)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask[..., None], image_embeds)
+        '''
+        print("input_ids", flush=True)
+        print(input_ids, flush=True)
+        print('positions', flush=True)
+        print(position_ids, flush=True)
+        # print('pixel', flush=True)
+        # print(pixel_values, flush=True)
+        print('inputs_embeds', flush=True)
+        print(inputs_embeds, flush=True)
+        '''
 
+        #import pdb; pdb.set_trace()
         hidden_states = self.model(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -666,6 +722,9 @@ class Qwen2VLForConditionalGeneration(nn.Module, DeployModelMixin, CudaGraphMixi
             inputs_embeds=inputs_embeds,
             mrope_position_ids=mrope_position_ids,
         )
+        #print("hidden_states", flush=True)
+        #print(hidden_states, flush=True)
+        #import pdb; pdb.set_trace()
         return hidden_states
 
     def get_logits(self, hidden_states: torch.Tensor):
@@ -890,9 +949,11 @@ class Qwen2VLForConditionalGeneration(nn.Module, DeployModelMixin, CudaGraphMixi
                            context: StepContext = None):
         """Update model meta."""
         if context.is_decoding:
-            return self._update_model_meta_decoding(context)
+            metas = self._update_model_meta_decoding(context)
         else:
-            return self._update_model_meta_prefilling(context)
+            metas = self._update_model_meta_prefilling(context)
+        context.model_metas = metas
+        return metas
 
     def get_input_processor(self) -> BaseModelInputProcessor:
         """Get input processor."""

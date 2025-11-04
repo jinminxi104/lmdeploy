@@ -319,6 +319,7 @@ class AscendOpsBackend(DlinferOpsBackend):
     @staticmethod
     def build_graph_runner(model: torch.nn.Module, model_config: ModelConfig, cache_config: CacheConfig,
                            backend_config: BackendConfig, device: torch.device):
+        #import pdb; pdb.set_trace()
         """Build graph runner."""
         if AscendOpsBackend.enable_aclgraph():
             from lmdeploy.pytorch.backends.cuda.graph_runner import CUDAGraphRunner

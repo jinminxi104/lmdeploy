@@ -31,6 +31,7 @@ def _process_bad_words_(scores: torch.Tensor,
 
 def _process_repetition_penalty_(scores: torch.Tensor, input_ids: torch.LongTensor, penalty: torch.Tensor):
     """Process repetition penalty."""
+    #import pdb; pdb.set_trace()
     score = torch.gather(scores, 1, input_ids)
     penalty = penalty.to(score.dtype)
     score = torch.where(score < 0, score * penalty[:, None], score / penalty[:, None])

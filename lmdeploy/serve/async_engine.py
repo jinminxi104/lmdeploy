@@ -659,6 +659,8 @@ class AsyncEngine(LogitsMixin):
         # [{'role': 'user', 'content': [{'type': 'text', 'text': 'hi'}]}] ->
         # [{'role': 'user', 'content': 'hi']
         # Also ensure all messages have 'content' field (set to None if missing, e.g., assistant with tool_calls)
+        import pdb
+        pdb.set_trace()
         if isinstance(prompt, list):
             prompt = [_merge_message_content(msg) for msg in prompt]
         if do_preprocess:
@@ -771,6 +773,8 @@ class AsyncEngine(LogitsMixin):
         if gen_config.n > 1:
             logger.warning(f'n({gen_config.n}) > 1 hasn\'t been supported yet. Fallback to 1')
             gen_config.n = 1
+        import pdb
+        pdb.set_trace()
         if messages:
             prompt = messages
             self.request_logger.log_prompt(session_id=session_id, prompt=prompt)

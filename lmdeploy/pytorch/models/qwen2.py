@@ -68,6 +68,10 @@ class Qwen2Attention(nn.Module):
         """Rewrite of LlamaAttention.forward."""
         # qkv proj
         qkv_states = self.qkv_proj(hidden_states)
+        print(f'qkv_states shape: {qkv_states.shape}', flush=True)
+        if qkv_states.shape[0] == 1:
+            import pdb
+            pdb.set_trace()
         # (-1, heads, head_dim)
         qkv_states = qkv_states.flatten(0, -2)
         query_states, key_states, value_states = self.qkv_proj.split_qkv(qkv_states)
