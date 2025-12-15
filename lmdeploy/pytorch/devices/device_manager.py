@@ -1,7 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any, Callable, Optional, Union
 
 import torch
 
@@ -41,14 +41,15 @@ def get_device_manager():
     return DeviceManager()
 
 
-def current_stream(device_type: str = 'cuda'):
+def current_stream(device_type: str = 'cuda') -> Optional[Any]:
     """Get current stream for the specified device type.
     
     Args:
         device_type: Device type ('cuda', 'ascend', 'npu', etc.)
         
     Returns:
-        Current stream object for the device type
+        Current stream object for the device type, or None if the device type
+        is not supported or if the required library (e.g., torch_npu) is not available.
     """
     if device_type == 'cuda':
         return torch.cuda.current_stream()
@@ -65,11 +66,12 @@ def current_stream(device_type: str = 'cuda'):
 
 
 @contextmanager
-def device_stream_context(stream, device_type: str = 'cuda'):
+def device_stream_context(stream: Optional[Union[torch.cuda.Stream, Any]], device_type: str = 'cuda'):
     """Context manager for device streams that works across different device types.
     
     Args:
-        stream: Stream object (can be None for non-streaming devices)
+        stream: Stream object (torch.cuda.Stream for CUDA, torch_npu.npu.Stream for NPU,
+                or None for non-streaming devices)
         device_type: Device type ('cuda', 'ascend', 'npu', etc.)
         
     Yields:
