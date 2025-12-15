@@ -21,7 +21,7 @@ from lmdeploy.utils import FlattenedTensorBucket, FlattenedTensorMetadata, get_l
 
 from ..backends import get_backend
 from ..config import BackendConfig, CacheConfig, MiscConfig, ModelConfig, SpecDecodeConfig
-from ..devices import DeviceContext, get_device_manager
+from ..devices import DeviceContext, current_stream, device_stream_context, get_device_manager
 from ..distributed import DistContext, get_dist_manager
 from ..model_inputs import ModelInputs, step_ctx_manager
 from ..models.patch import BuildModelContext, add_adapters, build_patched_model, update_custom_module_map
@@ -222,11 +222,12 @@ def model_forward(
     inputs: ModelInputs,
     cache_engine: CacheEngine,
     state_cache_engine: StateCacheEngine,
-    stream: torch.cuda.Stream = None,
+    stream = None,
+    device_type: str = 'cuda',
 ):
     """Perform model forward."""
-    stream = stream or torch.cuda.current_stream()
-    with torch.cuda.stream(stream), step_ctx_manager(model.ctx_mgr):
+    stream = stream or current_stream(device_type)
+    with device_stream_context(stream, device_type), step_ctx_manager(model.ctx_mgr):
         # forward
         ctx_mgr = model.ctx_mgr
         context = ctx_mgr.build_context(
@@ -417,7 +418,7 @@ class BaseModelAgent:
         if skip_warmup:
             return
 
-        with self.all_context(), torch.cuda.stream(self.stream):
+        with self.all_context(), device_stream_context(self.stream, self.device_ctx.device_type):
             max_batches = self.cache_config.max_batches
 
             num_tokens = max_batches
@@ -846,7 +847,7 @@ class BaseModelAgent:
 
     async def _async_loop_background(self, forward_event: asyncio.Event = None):
         """Async loop background."""
-        with self.all_context(), torch.cuda.stream(self.stream), torch.inference_mode():
+        with self.all_context(), device_stream_context(self.stream, self.device_ctx.device_type), torch.inference_mode():
             dist_config = get_dist_manager().current_config()
             dp = dist_config.dp
 
@@ -874,7 +875,7 @@ class BaseModelAgent:
             forward_inputs_cuda = {}
             forward_inputs_cuda.update(forward_inputs)
             logger.debug('preprocessing forward inputs.')
-            with torch.cuda.stream(self.out_stream), torch.inference_mode(), record_function('inputs_H2D'):
+            with device_stream_context(self.out_stream, self.device_ctx.device_type), torch.inference_mode(), record_function('inputs_H2D'):
                 for k in keys:
                     if k not in forward_inputs_cuda:
                         continue
@@ -998,7 +999,7 @@ class BaseModelAgent:
         out, event = out
         while not event.query():
             await asyncio.sleep(0.001)
-        with torch.cuda.stream(self.out_stream), torch.inference_mode(), record_function('outputs_D2H'):
+        with device_stream_context(self.out_stream, self.device_ctx.device_type), torch.inference_mode(), record_function('outputs_D2H'):
             out = out.to_cpu()
             out.new_token_timestamp = time.time()
         return out
@@ -1079,6 +1080,7 @@ class BaseModelAgent:
             self.cache_engine,
             state_cache_engine=self.state_cache_engine,
             stream=self.stream,
+            device_type=self.device_ctx.device_type,
         )
         return output
 

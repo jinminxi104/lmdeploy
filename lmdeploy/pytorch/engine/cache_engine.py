@@ -8,6 +8,7 @@ from typing import Dict, List, Literal, Optional, Tuple
 import torch
 
 from lmdeploy.pytorch.backends import get_backend
+from lmdeploy.pytorch.devices import current_stream, device_stream_context
 from lmdeploy.pytorch.disagg.backend.backend import MIGRATION_BACKENDS
 from lmdeploy.pytorch.disagg.backend.base import MigrationBackendImpl
 from lmdeploy.pytorch.disagg.conn.protocol import DistServeInitRequest, DistServeKVTransferEndpointInfo
@@ -85,10 +86,34 @@ class CacheEngine:
         self.migration_backend_impl: Optional[MigrationBackendImpl] = None
 
         # Initialize the stream for caching operations.
-        self.cache_stream = cache_stream or torch.cuda.Stream()
-        assert self.cache_stream != torch.cuda.current_stream()
+        if cache_stream is None:
+            if self.cache_config.device_type == 'cuda':
+                cache_stream = torch.cuda.Stream()
+            elif self.cache_config.device_type in ['ascend', 'npu']:
+                try:
+                    import torch_npu
+                    cache_stream = torch_npu.npu.Stream()
+                except ImportError:
+                    cache_stream = None
+        self.cache_stream = cache_stream
+        
+        # Verify cache_stream is different from current stream (only for CUDA/NPU)
+        if self.cache_stream is not None:
+            cur_stream = current_stream(self.cache_config.device_type)
+            if cur_stream is not None:
+                assert self.cache_stream != cur_stream, 'Cache stream must be different from current stream'
+        
         # Initialize the events for stream synchronization.
-        self.events = torch.cuda.Event()
+        if self.cache_config.device_type == 'cuda':
+            self.events = torch.cuda.Event()
+        elif self.cache_config.device_type in ['ascend', 'npu']:
+            try:
+                import torch_npu
+                self.events = torch_npu.npu.Event()
+            except ImportError:
+                self.events = None
+        else:
+            self.events = None
 
         logger.debug(f'Initialize cache engine with {cache_config.num_gpu_blocks}'
                      f' gpu blocks and {cache_config.num_cpu_blocks} cpu blocks.')
@@ -252,14 +277,15 @@ class CacheEngine:
         src_idx, dst_idx = list(zip(*src_to_dst.items()))
         src_idx = torch.tensor(src_idx, device=src[0].device)
         dst_idx = torch.tensor(dst_idx, device=dst[0].device)
-        with torch.cuda.stream(self.cache_stream):
+        with device_stream_context(self.cache_stream, self.cache_config.device_type):
             for scache, dcache in zip(src, dst):
                 for idx in range(0, num_copy, BLOCKS_PER_COPY):
                     sidx = src_idx[idx:idx + BLOCKS_PER_COPY]
                     didx = dst_idx[idx:idx + BLOCKS_PER_COPY]
                     sdata = scache[:, sidx]
                     dcache.index_copy_(1, didx, sdata.to(dcache.device))
-            self.events.record(stream=self.cache_stream)
+            if self.events is not None:
+                self.events.record(stream=self.cache_stream)
 
     def swap_in(self, src_to_dst: Dict[int, int]) -> None:
         """Move cache from Host to Device.
