@@ -88,6 +88,41 @@ Run the following commands to launch docker container for lmdeploy VLM serving:
 ```bash
 docker run -it --net=host crpi-4crprmm5baj1v8iv.cn-hangzhou.personal.cr.aliyuncs.com/lmdeploy_dlinfer/ascend:a2-latest \
     bash -i -c "lmdeploy serve api_server --backend pytorch --device ascend OpenGVLab/InternVL2-2B"
+
+### Streaming Output
+
+Ascend backend supports streaming output. After starting the service, you can test streaming output with the following commands:
+
+#### Using curl command
+
+```bash
+curl -N -X POST http://localhost:23333/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{ "model": "internlm2_5-7b-chat", "messages": [{"role": "user", "content": "Tell me about yourself"}], "stream": true }'
+```
+
+#### Using Python OpenAI Client
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key='YOUR_API_KEY',
+    base_url="http://0.0.0.0:23333/v1"
+)
+
+model_name = client.models.list().data[0].id
+response = client.chat.completions.create(
+    model=model_name,
+    messages=[
+        {"role": "user", "content": "Tell me about yourself"}
+    ],
+    stream=True  # Enable streaming output
+)
+
+for chunk in response:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end='')
 ```
 
 ## Inference with Command line Interface

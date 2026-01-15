@@ -1,6 +1,9 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable, Optional, Union
+
+import torch
 
 from lmdeploy.pytorch.utils import CtxMgrBase, singleton
 
@@ -36,3 +39,55 @@ class DeviceManager(CtxMgrBase[DeviceContext]):
 def get_device_manager():
     """Get device manager."""
     return DeviceManager()
+
+
+def current_stream(device_type: str = 'cuda') -> Optional[Any]:
+    """Get current stream for the specified device type.
+    
+    Args:
+        device_type: Device type ('cuda', 'ascend', 'npu', etc.)
+        
+    Returns:
+        Current stream object for the device type, or None if the device type
+        is not supported or if the required library (e.g., torch_npu) is not available.
+    """
+    if device_type == 'cuda':
+        return torch.cuda.current_stream()
+    elif device_type in ['ascend', 'npu']:
+        try:
+            import torch_npu
+            return torch_npu.npu.current_stream()
+        except ImportError:
+            # Fallback to None if torch_npu is not available
+            return None
+    else:
+        # For other device types, return None
+        return None
+
+
+@contextmanager
+def device_stream_context(stream: Optional[Union[torch.cuda.Stream, Any]], device_type: str = 'cuda'):
+    """Context manager for device streams that works across different device types.
+    
+    Args:
+        stream: Stream object (torch.cuda.Stream for CUDA, torch_npu.npu.Stream for NPU,
+                or None for non-streaming devices)
+        device_type: Device type ('cuda', 'ascend', 'npu', etc.)
+        
+    Yields:
+        None
+    """
+    if device_type == 'cuda' and stream is not None:
+        with torch.cuda.stream(stream):
+            yield
+    elif device_type in ['ascend', 'npu'] and stream is not None:
+        try:
+            import torch_npu
+            with torch_npu.npu.stream(stream):
+                yield
+        except ImportError:
+            # If torch_npu is not available, just yield without stream context
+            yield
+    else:
+        # For other device types or None stream, just yield without stream context
+        yield

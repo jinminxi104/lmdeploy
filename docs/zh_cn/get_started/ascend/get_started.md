@@ -83,6 +83,42 @@ docker run -it --net=host crpi-4crprmm5baj1v8iv.cn-hangzhou.personal.cr.aliyuncs
     bash -i -c "lmdeploy serve api_server --backend pytorch --device ascend OpenGVLab/InternVL2-2B"
 ```
 
+### 流式输出
+
+昇腾后端支持流式输出功能。启动服务后，可以使用以下命令进行流式输出测试：
+
+#### 使用 curl 命令
+
+```bash
+curl -N -X POST http://localhost:23333/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{ "model": "internlm2_5-7b-chat", "messages": [{"role": "user", "content": "介绍一下你自己"}], "stream": true }'
+```
+
+#### 使用 Python OpenAI 客户端
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key='YOUR_API_KEY',
+    base_url="http://0.0.0.0:23333/v1"
+)
+
+model_name = client.models.list().data[0].id
+response = client.chat.completions.create(
+    model=model_name,
+    messages=[
+        {"role": "user", "content": "介绍一下你自己"}
+    ],
+    stream=True  # 启用流式输出
+)
+
+for chunk in response:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end='')
+```
+
 ## 使用命令行与LLM模型对话
 
 将`--device ascend`加入到服务启动命令中。
