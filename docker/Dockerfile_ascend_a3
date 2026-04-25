@@ -14,14 +14,16 @@ RUN dnf update -y && \
 
 ENV HCCL_CONNECT_TIMEOUT=7200 \
     PYTORCH_NPU_ALLOC_CONF="expandable_segments:True" \
-    HCCL_OP_EXPANSION_MODE="AIV" \
     LD_PRELOAD=/usr/lib64/libjemalloc.so.2:$LD_PRELOAD
+#    HCCL_OP_EXPANSION_MODE="AIV" \
 
 ARG DLINFER_TAG=main
-ARG LMDEPLOY_TAG=main
+ARG LMDEPLOY_TAG=028dlinfer
 RUN --mount=type=cache,target=/root/.cache \
     pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && \
     pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn && \
+	pip install triton-ascend==3.2.0 && \
+    pip install git+https://gitcode.com/Ascend/triton-ascend-kernels.git@master && \
     pip install --no-cache-dir torch==2.9.0 torch-npu==2.9.0 torchvision==0.24.0 && \
     TORCH_DEVICE_BACKEND_AUTOLOAD=0 DEVICE=ascend pip install git+https://github.com/DeepLink-org/dlinfer.git@${DLINFER_TAG} && \
-    LMDEPLOY_TARGET_DEVICE=ascend pip install git+https://github.com/InternLM/lmdeploy.git@${LMDEPLOY_TAG}
+    LMDEPLOY_TARGET_DEVICE=ascend pip install git+https://github.com/jinminxi104/lmdeploy.git@${LMDEPLOY_TAG}
