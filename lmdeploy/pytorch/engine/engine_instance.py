@@ -72,6 +72,7 @@ def cancel(req_sender: RequestSender, session_id: int):
                                f'Error: {resp.type}.'))
 
 
+'''
 class SharedStore:
     def __init__(self):
         self._data = {}
@@ -111,6 +112,7 @@ def _lazy_create_ray_store():
                 namespace='lmdeploy',
                 lifetime='detached',
             ).remote()
+'''
 
 
 class EngineInstance(EngineInstanceBase):
@@ -127,8 +129,8 @@ class EngineInstance(EngineInstanceBase):
         self.max_input_len = self.engine.max_session_len
         self._enable_transfer_obj_ref = engine.engine_config.enable_transfer_obj_ref and \
             engine.engine_config.distributed_executor_backend == 'ray'
-        if self._enable_transfer_obj_ref:
-            _lazy_create_ray_store()
+        # if self._enable_transfer_obj_ref:
+        #     _lazy_create_ray_store()
 
     def __del__(self):
         """Destructor."""
@@ -141,8 +143,12 @@ class EngineInstance(EngineInstanceBase):
         if routed_experts is not None and resp.type in [ResponseType.FINISH, ResponseType.CANCEL]:
             if self._enable_transfer_obj_ref:
                 import ray
-                key = ray.get(_SHARED_STORE.put.remote(routed_experts))
-                outputs['routed_experts'] = key
+                # key = ray.get(_SHARED_STORE.put.remote(routed_experts))
+                # outputs['routed_experts'] = key
+                import pybase64
+                ref = ray.put(routed_experts)
+                data = ray.cloudpickle.dumps(ref)
+                outputs['routed_experts'] = pybase64.b64encode(data).decode('utf-8')
             else:
                 outputs['routed_experts'] = routed_experts
         return outputs

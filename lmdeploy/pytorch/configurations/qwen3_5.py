@@ -65,7 +65,7 @@ class Qwen3_5ModelConfigBuilder(AutoModelConfigBuilder):
         else:
             dtype = torch.float16
         ssm_dtype = dtype if not _envs.fp32_mamba_ssm_dtype else torch.float32
-        cfg.states_shapes = [(conv_state_shape, dtype), (recurrent_state_shape, ssm_dtype)]
+        cfg.states_shapes = [(conv_state_shape, dtype), (recurrent_state_shape, torch.float32)]
         cfg.is_gated_delta = True
         cfg.check_env_func = _check_env_qwen3_next
 

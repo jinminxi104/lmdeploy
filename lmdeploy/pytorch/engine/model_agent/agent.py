@@ -1304,6 +1304,7 @@ class BaseModelAgent:
 
         if 'kv_cache' in tags:
             self.build_cache_engine()
+            self.warmup()
             # wake up signal
             self.state.is_sleeping = False
             if self.dist_config.dp > 1:

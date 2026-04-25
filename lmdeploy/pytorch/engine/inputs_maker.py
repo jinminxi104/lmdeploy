@@ -749,6 +749,12 @@ class InputsMakerAsync:
         num_ready = scheduler.num_ready()
         num_running = scheduler.num_running()
         max_batches = self.config.max_batches
+        if num_ready + num_running >= max_batches:
+            return False
+        prealloc_size = self.engine_strategy.get_prealloc_size(True)
+        if scheduler.block_manager.get_num_free_gpu_blocks() < prealloc_size + 1:
+            return False
+        return True
         if num_ready + num_running < max_batches * 0.5:
             return True
 

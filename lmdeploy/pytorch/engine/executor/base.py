@@ -175,6 +175,7 @@ class ExecutorBase:
             cache_config.num_state_caches = num_state_caches
 
         mems = StateCacheEngine.get_cache_state_size(cache_config.states_shapes)
+        logger.debug(f'state cache mem for 1 cache: {mems >> 20} mb, num_state_caches: {num_state_caches}')
         mems *= num_state_caches
 
         if cache_config.enable_prefix_caching:
@@ -201,6 +202,7 @@ class ExecutorBase:
         # get state cache size
         state_cache_mem = self._get_state_cache_mem()
         free_mem = free_mem - state_cache_mem
+        logger.debug(f'after state mem minimal free gpu memory: {int(free_mem) >> 20} mb')
         assert free_mem > 0, 'No enough gpu memory for state cache. Please reduce max_batch_size.'
 
         vocal_size = self.model_config.vocab_size
@@ -228,7 +230,7 @@ class ExecutorBase:
         free_mem -= runtime_mem
         logger.debug(f'estimated max runtime memory: {runtime_mem >> 20} mb')
         available_mem = free_mem * cache_config.cache_max_entry_count
-
+        logger.debug(f'1.0 kv: {int(available_mem) >> 20} mb')
         if cache_config.num_gpu_blocks == 0:
             cache_config.num_gpu_blocks = int(available_mem / cache_block_size)
             if cache_config.num_gpu_blocks <= 0:
